@@ -11,7 +11,7 @@ class MaxPoolLayer(BaseLayer):
     Используется channel-first представление данных, т.е. тензоры имеют размер [B, C, H, W].
     Всегда ядро свертки квадратное, kernel_size имеет тип int. Значение kernel_size всегда нечетное.
 
-    В качестве значений padding используется -np.inf, т.е. добавленые pad-значения используются исключительно
+    В качестве значений padding используется -np.inf, т.е. добавленные pad-значения используются исключительно
      для корректности индексов в любом положении, и никогда не могут реально оказаться максимумом в
      своем пуле.
     Гарантируется, что значения padding, stride и kernel_size будут такие, что
@@ -26,10 +26,13 @@ class MaxPoolLayer(BaseLayer):
     Результат:
     (Pool[-1:2], Pool[1:4], Pool[3:6], Pool[5:(7+1)])
     """
+
     def __init__(self, kernel_size: int, stride: int, padding: int):
-        assert(kernel_size % 2 == 1)
+        assert (kernel_size % 2 == 1)
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
         super().__init__()
-        raise NotImplementedError()
 
     @staticmethod
     def _pad_neg_inf(tensor, one_size_pad, axis=[-1, -2]):
@@ -38,14 +41,27 @@ class MaxPoolLayer(BaseLayer):
         Метод не проверяется в тестах -- можно релизовать слой без
         использования этого метода.
         """
-        pass
+        pad = [(0, 0)] * tensor.ndim
+        for ax in axis:
+            pad[ax] = (one_size_pad, one_size_pad)
+        return np.pad(tensor, pad, 'constant', constant_values=-np.inf)
 
     def forward(self, input: np.ndarray) -> np.ndarray:
         assert input.shape[-1] == input.shape[-2]
-        assert (input.shape[-1] + 2 * self.padding - self.kernel_size) % self.stride  == 0
-        raise NotImplementedError()
+        assert (input.shape[-1] + 2 * self.padding - self.kernel_size) % self.stride == 0
 
+        padded = self._pad_neg_inf(input, self.padding)
+        output_h = (input.shape[-2] + 2 * self.padding - self.kernel_size) // self.stride + 1
+        output_w = (input.shape[-1] + 2 * self.padding - self.kernel_size) // self.stride + 1
+        output = np.zeros((padded.shape[0], padded.shape[1], output_h, output_w))
 
-    def backward(self, output_grad: np.ndarray)->np.ndarray:
-        raise NotImplementedError()
+        for i in range(output.shape[-2]):
+            for j in range(output.shape[-1]):
+                output[:, :, i, j] = padded[:, :,
+                                     i * self.stride:i * self.stride + self.kernel_size,
+                                     j * self.stride:j * self.stride + self.kernel_size
+                                     ].max(axis=(-2, -1))
+        return output
 
+    def backward(self, output_grad: np.ndarray) -> np.ndarray:
+        pass
